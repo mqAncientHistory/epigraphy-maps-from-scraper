@@ -35,8 +35,8 @@ SUPPORTING_DATA = Path("awmc.unc.edu")
 SUPPORTING_DATA = SUPPORTING_DATA / "awmc" / "map_data" / "shapefiles"
 ROMAN_ROADS_SHP = SUPPORTING_DATA / "ba_roads" / "ba_roads.shp"
 PROVINCES_SHP   = SUPPORTING_DATA / "cultural_data" / "political_shading" / "roman_empire_ad_117" / "shape" / "roman_empire_ad_117.shp"
-CITIES_SHP      = SUPPORTING_DATA / "strabo_data" / "straborivers_current.shp"
-
+#CITIES_SHP      = SUPPORTING_DATA / "strabo_data" / "straborivers_current.shp"
+CITIES_DATA     = Path("cities") / "Hanson2016_Cities_OxREP.csv"
 
 # WMS_LAYERS={"Roman Roads":{"name":'Roman Roads', "zorder":"0"},
 # 			"Provinces (ca. AD117)":{"name":'Provinces (ca. AD117)', "zorder":"1"},
@@ -68,11 +68,15 @@ geopandas.options.use_pygeos = True
 import_rows = extract(DATA_FILE)
 import_dataframe = pandas.DataFrame(import_rows)
 
+cities_rows = extract(CITIES_DATA)
+cities_dataframe = pandas.DataFrame(cities_rows)
+
+
 #https://cmdlinetips.com/2018/02/how-to-subset-pandas-dataframe-based-on-values-of-a-column/
 
 roads_3857 = geopandas.read_file(ROMAN_ROADS_SHP).to_crs(epsg=3857)
 provinces_3857 = geopandas.read_file(PROVINCES_SHP).to_crs(epsg=3857)
-cities_3857 = geopandas.read_file(CITIES_SHP).to_crs(epsg=3857)
+#cities_3857 = geopandas.read_file(CITIES_SHP).to_crs(epsg=3857)
 
 point_geodataframe = geopandas.GeoDataFrame(
   import_dataframe[import_dataframe.Longitude.notnull()],
@@ -82,6 +86,15 @@ point_geodataframe = geopandas.GeoDataFrame(
   crs="EPSG:4326")
 if DEBUG:
 	pprint(point_geodataframe)
+
+cities_geodataframe_3857 = geopandas.GeoDataFrame(
+  cities_dataframe,
+  geometry=geopandas.points_from_xy(
+    cities_dataframe["Longitude (X)"],
+    cities_dataframe["Latitude (Y)"]),
+  crs="EPSG:4326").to_crs(epsg=3857)
+if DEBUG:
+	pprint(point_geodataframe)	
 
 point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 
@@ -121,11 +134,16 @@ point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 fig, ax = plt.subplots()
 plt.title(DATA_FILENAME)
 
+#https://gis.stackexchange.com/a/266833
+xmin, ymin, xmax, ymax = point_geodataframe_3857.total_bounds
 
-provinces_3857.plot(ax=ax, linewidth=1, alpha=0.5,  cmap=plt.get_cmap("prism"), zorder=1)
-roads_3857.plot(ax=ax, linewidth=0.1, alpha=1,  color='black', zorder=2)
-#cities_3857.plot(ax=ax, linewidth=0.3, alpha=1,  color='purple', zorder=3)
-point_geodataframe_3857.plot(ax=ax, linewidth=0.2, markersize=1, alpha=0.5, color='red', edgecolor='k', zorder=4)
+bounded_prov = provinces_3857.cx[xmin:xmax, ymin:ymax]
+bounded_prov.plot(ax=ax, linewidth=1, alpha=0.5,  cmap=plt.get_cmap("prism"), zorder=1)
+bounded_roads = roads_3857.cx[xmin:xmax, ymin:ymax]
+bounded_roads.plot(ax=ax, linewidth=0.2, alpha=1,  color='gray', zorder=2)
+bounded_cities = cities_geodataframe_3857.cx[xmin:xmax, ymin:ymax]
+bounded_cities.plot(ax=ax, marker="s", markersize=0.1, linewidth=0.25, alpha=0.5,  color='black', zorder=3)
+point_geodataframe_3857.plot(ax=ax, linewidth=0.2, markersize=1, alpha=1, color='white', edgecolor='k', zorder=4)
 ctx.add_basemap(ax, source=ctx.providers.Stamen.TerrainBackground)
 
 # for layer in WMS_LAYERS:
