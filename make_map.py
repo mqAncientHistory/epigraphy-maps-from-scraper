@@ -12,13 +12,14 @@ import pandas
 import os
 import subprocess
 import geoplot
+import matplotlib
 # https://geopandas.org/reference/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame
 from shapely.geometry import Point
 # https://geopandas.org/gallery/plotting_basemap_background.html#sphx-glr-gallery-plotting-basemap-background-py
 import contextily as ctx
 #https://geopython.github.io/OWSLib/#wms
-from owslib.wms import WebMapService
-from owslib.wfs import WebFeatureService
+#from owslib.wms import WebMapService
+#from owslib.wfs import WebFeatureService
 
 # TO DISABLE SSL CHECKING 
 # $ export CURL_CA_BUNDLE=""; ./make_map.py
@@ -30,33 +31,37 @@ DATA_DIR = Path("data")
 DATA_FILENAME = "2020-08-18-term1_petra-249.tsv"
 DATA_FILE = DATA_DIR / DATA_FILENAME
 DEBUG = False
-ROMAN_ROADS = Path("Roman-Road-Network")
-ROMAN_ROADS_SHP = ROMAN_ROADS / "roads" / "roman_roads_v2008.shp"
+SUPPORTING_DATA = Path("awmc.unc.edu")
+SUPPORTING_DATA = SUPPORTING_DATA / "awmc" / "map_data" / "shapefiles"
+ROMAN_ROADS_SHP = SUPPORTING_DATA / "ba_roads" / "ba_roads.shp"
+PROVINCES_SHP   = SUPPORTING_DATA / "cultural_data" / "political_shading" / "roman_empire_ad_117" / "shape" / "roman_empire_ad_117.shp"
+CITIES_SHP      = SUPPORTING_DATA / "strabo_data" / "straborivers_current.shp"
 
-WMS_LAYERS={"Roman Roads":{"name":'Roman Roads', "zorder":"0"},
-			"Provinces (ca. AD117)":{"name":'Provinces (ca. AD117)', "zorder":"1"},
-			"Cities and Settlements":{"name":'Cities and Settlements', "zorder":"2"},
-}
-layers_list = list(WMS_LAYERS.keys())
+
+# WMS_LAYERS={"Roman Roads":{"name":'Roman Roads', "zorder":"0"},
+# 			"Provinces (ca. AD117)":{"name":'Provinces (ca. AD117)', "zorder":"1"},
+# 			"Cities and Settlements":{"name":'Cities and Settlements', "zorder":"2"},
+# }
+# layers_list = list(WMS_LAYERS.keys())
 # https://stackoverflow.com/a/15445989
-import requests
-from urllib3.exceptions import InsecureRequestWarning
+# import requests
+# from urllib3.exceptions import InsecureRequestWarning
 
-# Suppress only the single warning from urllib3 needed.
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+# # Suppress only the single warning from urllib3 needed.
+# requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
 
-wms = WebMapService('https://ags.cga.harvard.edu/arcgis/services/darmc/roman/MapServer/WMSServer?', version='1.1.1')
-for content in wms.contents:
-	if wms[content].title in WMS_LAYERS:
-		pprint((content, wms[content], wms[content].title, wms[content].crsOptions, wms[content].styles, wms[content].boundingBoxWGS84))
+# wms = WebMapService('https://ags.cga.harvard.edu/arcgis/services/darmc/roman/MapServer/WMSServer?', version='1.1.1')
+# for content in wms.contents:
+# 	if wms[content].title in WMS_LAYERS:
+# 		pprint((content, wms[content], wms[content].title, wms[content].crsOptions, wms[content].styles, wms[content].boundingBoxWGS84))
 
-		WMS_LAYERS[wms[content].title]['wms'] = wms[content]
+# 		WMS_LAYERS[wms[content].title]['wms'] = wms[content]
 #https://geopandas.org/install.html
 geopandas.options.use_pygeos = True
-pprint(WMS_LAYERS)
-pprint([op.name for op in wms.operations])
+# pprint(WMS_LAYERS)
+# pprint([op.name for op in wms.operations])
 
 # https://frictionlessdata.io/tooling/python/extracting-data/
 # Handles multiline columns cleanly.
@@ -65,7 +70,10 @@ import_dataframe = pandas.DataFrame(import_rows)
 
 #https://cmdlinetips.com/2018/02/how-to-subset-pandas-dataframe-based-on-values-of-a-column/
 
-roads = geopandas.read_file(ROMAN_ROADS_SHP)
+roads_3857 = geopandas.read_file(ROMAN_ROADS_SHP).to_crs(epsg=3857)
+provinces_3857 = geopandas.read_file(PROVINCES_SHP).to_crs(epsg=3857)
+cities_3857 = geopandas.read_file(CITIES_SHP).to_crs(epsg=3857)
+
 point_geodataframe = geopandas.GeoDataFrame(
   import_dataframe[import_dataframe.Longitude.notnull()],
   geometry=geopandas.points_from_xy(
@@ -79,8 +87,8 @@ point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 
 
 
-pprint(wms.getOperationByName('GetCapabilities').methods)
-pprint(wms.getOperationByName('GetCapabilities').formatOptions)
+# pprint(wms.getOperationByName('GetCapabilities').methods)
+# pprint(wms.getOperationByName('GetCapabilities').formatOptions)
 
 # pprint(point_geodataframe_3857.total_bounds)
 # img = wms.getmap(layers=['92'],
@@ -112,9 +120,12 @@ pprint(wms.getOperationByName('GetCapabilities').formatOptions)
 
 fig, ax = plt.subplots()
 plt.title(DATA_FILENAME)
-roads_3857 = roads.to_crs(epsg=3857)
-roads_3857.plot(ax=ax, linewidth=0.1, alpha=1,  color='gray', zorder=1)
-point_geodataframe_3857.plot(ax=ax, linewidth=0.1, markersize=1, alpha=0.5, color='red', edgecolor='k', zorder=2)
+
+
+provinces_3857.plot(ax=ax, linewidth=1, alpha=0.5,  cmap=plt.get_cmap("prism"), zorder=1)
+roads_3857.plot(ax=ax, linewidth=0.1, alpha=1,  color='black', zorder=2)
+#cities_3857.plot(ax=ax, linewidth=0.3, alpha=1,  color='purple', zorder=3)
+point_geodataframe_3857.plot(ax=ax, linewidth=0.2, markersize=1, alpha=0.5, color='red', edgecolor='k', zorder=4)
 ctx.add_basemap(ax, source=ctx.providers.Stamen.TerrainBackground)
 
 # for layer in WMS_LAYERS:
@@ -133,7 +144,7 @@ plt.axis('off')
 
 #point_geodataframe.plot(ax=ax, color='red')
 MAP_FILENAME="testdata.png"
-plt.savefig(MAP_FILENAME, dpi=600)
+plt.savefig(MAP_FILENAME, dpi=1200)
 subprocess.call(["xdg-open", MAP_FILENAME])
 
 #pre_geo_data = {'objects':[], 'geometry':[]}
