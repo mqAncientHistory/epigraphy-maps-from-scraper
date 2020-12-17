@@ -13,6 +13,8 @@ import os
 import subprocess
 import geoplot
 import matplotlib
+import shutil
+import glob
 # https://geopandas.org/reference/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame
 from shapely.geometry import Point
 # https://geopandas.org/gallery/plotting_basemap_background.html#sphx-glr-gallery-plotting-basemap-background-py
@@ -27,9 +29,9 @@ import contextily as ctx
 
 
 
-DATA_DIR = Path("data")
+DATA_DIR = "data"
 DATA_FILENAME = "2020-08-18-term1_petra-249.tsv"
-DATA_FILE = DATA_DIR / DATA_FILENAME
+#DATA_FILE = DATA_DIR / DATA_FILENAME
 DEBUG = False
 SUPPORTING_DATA = Path("awmc.unc.edu")
 SUPPORTING_DATA = SUPPORTING_DATA / "awmc" / "map_data" / "shapefiles"
@@ -39,8 +41,8 @@ PROVINCES_SHP   = SUPPORTING_DATA / "cultural_data" / "political_shading" / "rom
 CITIES_DATA     = Path("cities") / "Hanson2016_Cities_OxREP.csv"
 
 # WMS_LAYERS={"Roman Roads":{"name":'Roman Roads', "zorder":"0"},
-# 			"Provinces (ca. AD117)":{"name":'Provinces (ca. AD117)', "zorder":"1"},
-# 			"Cities and Settlements":{"name":'Cities and Settlements', "zorder":"2"},
+#       "Provinces (ca. AD117)":{"name":'Provinces (ca. AD117)', "zorder":"1"},
+#       "Cities and Settlements":{"name":'Cities and Settlements', "zorder":"2"},
 # }
 # layers_list = list(WMS_LAYERS.keys())
 # https://stackoverflow.com/a/15445989
@@ -54,49 +56,11 @@ CITIES_DATA     = Path("cities") / "Hanson2016_Cities_OxREP.csv"
 
 # wms = WebMapService('https://ags.cga.harvard.edu/arcgis/services/darmc/roman/MapServer/WMSServer?', version='1.1.1')
 # for content in wms.contents:
-# 	if wms[content].title in WMS_LAYERS:
-# 		pprint((content, wms[content], wms[content].title, wms[content].crsOptions, wms[content].styles, wms[content].boundingBoxWGS84))
+#   if wms[content].title in WMS_LAYERS:
+#     pprint((content, wms[content], wms[content].title, wms[content].crsOptions, wms[content].styles, wms[content].boundingBoxWGS84))
 
-# 		WMS_LAYERS[wms[content].title]['wms'] = wms[content]
+#     WMS_LAYERS[wms[content].title]['wms'] = wms[content]
 #https://geopandas.org/install.html
-geopandas.options.use_pygeos = True
-# pprint(WMS_LAYERS)
-# pprint([op.name for op in wms.operations])
-
-# https://frictionlessdata.io/tooling/python/extracting-data/
-# Handles multiline columns cleanly.
-import_rows = extract(DATA_FILE)
-import_dataframe = pandas.DataFrame(import_rows)
-
-cities_rows = extract(CITIES_DATA)
-cities_dataframe = pandas.DataFrame(cities_rows)
-
-
-#https://cmdlinetips.com/2018/02/how-to-subset-pandas-dataframe-based-on-values-of-a-column/
-
-roads_3857 = geopandas.read_file(ROMAN_ROADS_SHP).to_crs(epsg=3857)
-provinces_3857 = geopandas.read_file(PROVINCES_SHP).to_crs(epsg=3857)
-#cities_3857 = geopandas.read_file(CITIES_SHP).to_crs(epsg=3857)
-
-point_geodataframe = geopandas.GeoDataFrame(
-  import_dataframe[import_dataframe.Longitude.notnull()],
-  geometry=geopandas.points_from_xy(
-    import_dataframe[import_dataframe.Longitude.notnull()].Longitude,
-    import_dataframe[import_dataframe.Longitude.notnull()].Latitude),
-  crs="EPSG:4326")
-if DEBUG:
-	pprint(point_geodataframe)
-
-cities_geodataframe_3857 = geopandas.GeoDataFrame(
-  cities_dataframe,
-  geometry=geopandas.points_from_xy(
-    cities_dataframe["Longitude (X)"],
-    cities_dataframe["Latitude (Y)"]),
-  crs="EPSG:4326").to_crs(epsg=3857)
-if DEBUG:
-	pprint(point_geodataframe)	
-
-point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 
 
 
@@ -118,7 +82,6 @@ point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 # out.close()
 
 # https://geopandas.org/gallery/create_geopandas_from_pandas.html#sphx-glr-gallery-create-geopandas-from-pandas-py
-#world = geopandas.read_file(geopandas.datasets.get_path('naturalearth_lowres'))
 
 # ax = world.plot(
 #   color='white', 
@@ -131,44 +94,111 @@ point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
 # )
 # ax.outline_patch.set_visible(True)
 
-fig, ax = plt.subplots()
-plt.title(DATA_FILENAME)
 
-#https://gis.stackexchange.com/a/266833
-xmin, ymin, xmax, ymax = point_geodataframe_3857.total_bounds
-
-bounded_prov = provinces_3857.cx[xmin:xmax, ymin:ymax]
-bounded_prov.plot(ax=ax, linewidth=1, alpha=0.5,  cmap=plt.get_cmap("prism"), zorder=1)
-bounded_roads = roads_3857.cx[xmin:xmax, ymin:ymax]
-bounded_roads.plot(ax=ax, linewidth=0.2, alpha=1,  color='gray', zorder=2)
-bounded_cities = cities_geodataframe_3857.cx[xmin:xmax, ymin:ymax]
-bounded_cities.plot(ax=ax, marker="s", markersize=0.1, linewidth=0.25, alpha=0.5,  color='black', zorder=3)
-point_geodataframe_3857.plot(ax=ax, linewidth=0.2, markersize=1, alpha=1, color='white', edgecolor='k', zorder=4)
-ctx.add_basemap(ax, source=ctx.providers.Stamen.TerrainBackground)
-
-# for layer in WMS_LAYERS:
-# 	print("foo")
-# 	current_layer = WMS_LAYERS[layer]['wms']
-# 	pprint(layer)
-# 	pprint(current_layer.getOperationByName('GetMap').methods)
-# 	pprint(current_layer.getOperationByName('GetMap').formatOptions)
-
-#layermap_3857 = wms.getmap(layers=WMS_LAYERS.keys(),
-#                      		  srs="EPSG:3857",
-#                      		  )
+cities_rows = extract(CITIES_DATA)
+cities_dataframe = pandas.DataFrame(cities_rows)
 
 
-plt.axis('off')
+#https://cmdlinetips.com/2018/02/how-to-subset-pandas-dataframe-based-on-values-of-a-column/
 
-#point_geodataframe.plot(ax=ax, color='red')
-MAP_FILENAME="testdata.png"
-plt.savefig(MAP_FILENAME, dpi=1200)
-subprocess.call(["xdg-open", MAP_FILENAME])
+roads_3857 = geopandas.read_file(ROMAN_ROADS_SHP).to_crs(epsg=3857)
+provinces_3857 = geopandas.read_file(PROVINCES_SHP).to_crs(epsg=3857)
 
+
+cities_geodataframe_3857 = geopandas.GeoDataFrame(
+  cities_dataframe,
+  geometry=geopandas.points_from_xy(
+    cities_dataframe["Longitude (X)"],
+    cities_dataframe["Latitude (Y)"]),
+  crs="EPSG:4326").to_crs(epsg=3857)
+
+geopandas.options.use_pygeos = True
+def makeMap(data_file, roads_3857, provinces_3857, cities_geodataframe_3857, provinces=True, roads=True, cities=True):
+
+  # pprint(WMS_LAYERS)
+  # pprint([op.name for op in wms.operations])
+
+  # https://frictionlessdata.io/tooling/python/extracting-data/
+  # Handles multiline columns cleanly.
+  data_filename = os.path.basename(data_file)
+  import_rows = extract(data_file)
+  import_dataframe = pandas.DataFrame(import_rows)
+
+  #cities_3857 = geopandas.read_file(CITIES_SHP).to_crs(epsg=3857)
+
+  point_geodataframe = geopandas.GeoDataFrame(
+  import_dataframe[import_dataframe.Longitude.notnull()],
+  geometry=geopandas.points_from_xy(
+    import_dataframe[import_dataframe.Longitude.notnull()].Longitude,
+    import_dataframe[import_dataframe.Longitude.notnull()].Latitude),
+  crs="EPSG:4326")
+  if DEBUG:
+    pprint(point_geodataframe)
+
+  point_geodataframe_3857 = point_geodataframe.to_crs(epsg=3857)
+
+
+  fig, ax = plt.subplots()
+
+
+  #https://geopandas.org/gallery/plotting_with_geoplot.html
+  world = geopandas.read_file(geopandas.datasets.get_path('naturalearth_lowres'))
+  # ax = geoplot.polyplot(
+  #     world, 
+  #     #projection=geoplot.crs.Orthographic(), 
+  #     figsize=(8, 4)
+  # )
+
+  plt.title(data_filename.replace("-"," ").replace("_"," ").replace(".tsv",""))
+
+  #https://gis.stackexchange.com/a/266833
+  xmin, ymin, xmax, ymax = point_geodataframe_3857.total_bounds
+
+  if provinces:
+    bounded_prov = provinces_3857.cx[xmin:xmax, ymin:ymax]
+    bounded_prov.plot(ax=ax, linewidth=1, alpha=0.1,  cmap=plt.get_cmap("prism"), zorder=1)
+  if roads:
+    bounded_roads = roads_3857.cx[xmin:xmax, ymin:ymax]
+    bounded_roads.plot(ax=ax, linewidth=0.2, alpha=1,  color='gray', zorder=2)
+  if cities:
+    bounded_cities = cities_geodataframe_3857.cx[xmin:xmax, ymin:ymax]
+    bounded_cities.plot(ax=ax, marker="s", markersize=0.1, linewidth=0.25, alpha=0.5,  color='black', zorder=3)
+  point_geodataframe_3857.plot(ax=ax, marker="^", linewidth=0.2, markersize=2, alpha=0.5, color='red', edgecolor='k', zorder=4)
+  #ctx.add_basemap(ax, source=ctx.providers.Stamen.TerrainBackground)
+
+  # for layer in WMS_LAYERS:
+  #   print("foo")
+  #   current_layer = WMS_LAYERS[layer]['wms']
+  #   pprint(layer)
+  #   pprint(current_layer.getOperationByName('GetMap').methods)
+  #   pprint(current_layer.getOperationByName('GetMap').formatOptions)
+
+  #layermap_3857 = wms.getmap(layers=WMS_LAYERS.keys(),
+  #                           srs="EPSG:3857",
+  #                           )
+
+
+  plt.axis('off')
+
+  #point_geodataframe.plot(ax=ax, color='red')
+  #https://stackoverflow.com/a/53735672
+  map_filename=f"output_maps/{data_filename.replace('.tsv','')}{'-withProvinces' if provinces else ''}{'-withCities' if cities else ''}{'-withRoads' if roads else ''}"
+  plt.savefig(f"{map_filename}.pdf", dpi=1200,bbox_inches='tight')
+  #plt.savefig(f"{map_filename}.png", dpi=1200,bbox_inches='tight')
+  #subprocess.call(["xdg-open", MAP_FILENAME])
+  plt.close()
 #pre_geo_data = {'objects':[], 'geometry':[]}
 
 # for row in import_rows:
-# 	if DEBUG:
-# 		print(row)
-# #	objects.append(row)
-# #	geometry.append(Point())
+#   if DEBUG:
+#     print(row)
+# # objects.append(row)
+# # geometry.append(Point())
+
+shutil.rmtree("output_maps", ignore_errors=True)
+os.mkdir("output_maps")
+
+for file in glob.glob(f"{DATA_DIR}/*.tsv"):
+  print(f"Rendering: {file}")
+  makeMap(file, roads_3857, provinces_3857, cities_geodataframe_3857)
+  makeMap(file, roads_3857, provinces_3857, cities_geodataframe_3857, cities=False, roads=False)
